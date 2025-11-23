@@ -1,218 +1,427 @@
 # Features & UI/UX Enhancements
 
-Feature requests, UI/UX improvements, and enhancement proposals.
+This document catalogs proposed features, UI improvements, and user experience enhancements for NeoMutt. These range from small quality-of-life improvements to major new capabilities.
 
-## Sources
-- dialog.txt, summary.txt, compose-preview.md, reflow.md
-- notify.md, folder-completion.md, startup.md
-- mouse.txt, focus.txt, help-tabs.txt
-- panel/*.txt, sidebar/, pager/
+## Source Files
+- `brain-dump/dialog.txt` - Dialog system designs (750+ lines)
+- `brain-dump/summary.txt` - Summary page proposals (350+ lines)
+- `brain-dump/compose-preview.md` - Compose preview feature
+- `brain-dump/mouse.txt` - Mouse support (250+ lines)
+- `brain-dump/focus.txt`, `brain-dump/help-tabs.txt`
+- `brain-dump/panel/*.txt`, `brain-dump/sidebar/`, `brain-dump/pager/`
 
 ---
 
-## Summary Pages (summary.txt)
+## Summary Pages
+
+One of the most significant proposed feature sets is a collection of "summary pages" - introspection commands that let users see the current state of NeoMutt's configuration and bindings.
+
+### The Vision
+
+Users often struggle to understand what NeoMutt is doing under the hood. These summary pages would provide transparency through simple commands typed at the `:` prompt:
 
 ### Proposed Commands
-| Command | Description |
-|---------|-------------|
-| `:bind` | Show list of keybindings |
-| `:color` | Show list of colours |
-| `:help` | Easy access to manual |
-| `:messages` | Show old mutt messages |
-| `:scripts` | Show loaded config files |
-| `:set` | Show list of variables |
-| `:version` | Show detailed version info |
 
-### Additional Commands
-- `:about` - Brief project description
-- `:tips` - Show brief guides
+| Command | Purpose | Details |
+|---------|---------|---------|
+| `:bind` | Show keybindings | Display all keybindings and macros, grouped by context (Index, Pager, etc.). With "all" option, show everything that *can* be bound. |
+| `:color` | Show colors | List all objects that have been colored, shown as valid `color` commands with preview. With "all" option, show everything that *can* be colored. |
+| `:help` | Access manual | Show the text version of the manual, generated at build time. Could be expanded into a generic `display-file` function. |
+| `:messages` | Show message history | Display all messages and errors with timestamps. Limit to ~100 entries. "clear" option empties the buffer. |
+| `:scripts` | Show loaded configs | List all configuration files loaded at startup or via `source`. Red-flag any that had errors. |
+| `:set` | Show variables | Display changed variables. With "all" option, show every variable. Highlight changes from defaults. |
+| `:version` | Show version info | Detailed version information like `neomutt -v`, including patches and compilation flags. |
+
+### Additional Ideas
+
+- `:about` - Brief description of the NeoMutt project
+- `:tips` - Enable "tips" mode showing brief guides
 - `:credits` - List of contributors
-- `:hooks` - List all hooks (numbered)
-- `:patterns` - List pattern modifiers
+- `:hooks` - List all hooks (numbered) with matching folders
+- `:patterns` - List all pattern modifiers
+- `:changelog` - Read changelog from file
 
-### Features
-- Save page to file
-- Open in editor
-- Syntax highlighting
-- Context-sensitive (account/mailbox aware)
+### Implementation Notes
 
----
-
-## Dialog System Improvements (dialog.txt)
-
-### Window Management
-- Status bar shows list of summary pages
-- Dialog breadcrumbs in status bar
-- Tab-based navigation between dialogs
-- Sidebar as overlay option with timeout
-
-### Focus Handling
-- Fine-grained focus for context-sensitive help
-- Window pointer with unique/qualified names
-- Focus stack for push/pop navigation
-
-### Layer System
-- Layers own: Helpline, sidebar, index, pager, status
-- Change folder/account preserves windows
-- Compose gets new complete layer
-
-### Pager Enhancements
-- Separate: Text, Markup, Display layers
-- Plugin modifiers for colors/styles
-- Raw email as read-only mmap'd data
+- Opening a summary page should close any existing summary/help page
+- Status bar shows list of available summary pages when viewing one
+- Support saving page content to file (strip colors)
+- Support opening in external editor
+- Context-aware: `:set` should depend on current account/mailbox
 
 ---
 
-## Index/Pager Improvements
+## Dialog System Improvements
 
-### Index Features
-- Highlight-search (vim-like)
-- Incremental search with visual feedback
-- Automatic filtering as you type
-- Tag-pattern for browser
+The dialog system manages multi-screen workflows like Compose, Browser, and Help. Proposed improvements would make it more flexible and user-friendly.
 
-### Pager Features
-- Bare mode (cf weechat) for copy/paste
-- Toggle-quoted with proper level handling
-- Syntax highlighting plugins
-- Folding rules (vim-like)
+### Layer Architecture
 
-### Status Bar
-- Hide when empty
-- Dividing line between index and pager
-- Dynamic help bar with custom bindings
+Dialogs are organized in layers. Each layer owns a complete set of windows:
+
+```
+Layer: Index/Pager
+├── HelpLine
+├── Sidebar
+├── Index
+├── IndexBar
+├── Pager (optional)
+└── PagerBar (optional)
+
+Layer: Compose
+├── HelpLine
+├── Envelope
+├── AttachmentBar
+├── AttachmentView
+└── ComposeBar
+```
+
+### Sidebar as Overlay
+
+An innovative idea is making the sidebar an overlay that appears on demand:
+
+- `<sidebar-show>` makes it visible with a timeout
+- After timeout (or after any action), sidebar hides automatically
+- `<sidebar-hide>` for manual dismissal
+- Perfect for users who want space but occasional folder access
+
+### Dialog Breadcrumbs
+
+Status bar could show navigation breadcrumbs:
+```
+Index → Compose → Attach?
+```
+Only visible when navigating deeper than the main screen.
+
+### Tab-Based Navigation
+
+Future vision includes browser-like tabs:
+- Each tab could hold a different account or view
+- Backgrounded compose sessions shown in tabs
+- `Alt-1`, `Alt-2`, etc. for quick switching
+
+---
+
+## Index Improvements
+
+The Index is where users spend most of their time. These improvements would make it more powerful.
+
+### Vim-Style Search
+
+Implement search features inspired by Vim:
+
+- **Highlight-search**: Matching emails highlighted after search
+- **Incremental search**: Results update as you type
+- **Visual feedback**: See matches before pressing Enter
+- **Automatic filtering**: Optional mode where typing filters in real-time
+
+### Enhanced Patterns
+
+Currently, patterns only apply to certain fields. Proposed expansion:
+
+- Add patterns (optional) to all index fields
+- Tag-pattern for the browser (useful for compose-attach)
+- More index color patterns with optional conditions
+
+### Search by Message-ID
+
+The `~i REGEX` pattern for matching message IDs is problematic because message IDs often contain regex special characters. Proposed solution:
+
+```
+~i REGEX      # Current behavior: text is regex
+~i <TEXT>     # New: text is literal (angle brackets = literal mode)
+```
+
+---
+
+## Pager Improvements
+
+The Pager displays email content. These features would enhance readability and usability.
+
+### Bare Mode
+
+Inspired by Weechat, a "bare mode" for clean copy-paste:
+
+- Wrapping, markers (`+`), and scrollbars interfere with selecting text
+- `<bare-mode>` (suggested: Ctrl-B) drops into basic pager using `endwin()`
+- No wrapping, just dumps email to screen
+- Let terminal handle page up/down
+- `q` to exit back to normal mode
+- Optionally use ANSI sequences for clickable URLs
+- Eliminates need for external tools like urlview/urlscan
+
+### Toggle-Quoted Fixes
+
+Current `<toggle-quoted>` has issues with `$toggle_quoted_show_levels`:
+
+- If there are multiple quoting styles (`>` and `|`), only the first is handled
+- Should recognize all quoting styles, not just the first encountered
+
+### Syntax Highlighting Plugin System
+
+Allow Lua plugins to define highlighting rules:
+
+```lua
+rule "signature" {
+  apply_to = folder("[pattern]") or email("[pattern]"),
+  begin_pattern = "^-- $",
+  end_pattern = "^$",
+  max_lines = 4,
+  color = { fg = "gray", bg = "default" },
+  conceal = true  -- optionally hide matching content
+}
+```
 
 ---
 
 ## Color System Enhancements
 
-### Color Commands
-- `color toggle object [pattern]` - temporarily change visibility
-- Apply color to columns in index_format
-- Partial matches like status color
+NeoMutt's color system could be more powerful and flexible.
 
-### Color Features
-- Truecolor with simple/palette fallback
-- Linked colors for depth fallback
-- Quoted colors merged correctly
-- Color notifications for regex changes
+### Conceal Mode
 
-### Theme Support
-- `~/.config/neomutt/theme.rc` file/symlink
-- Separate theme and keybindings configs
-- Multiple color settings (increasing depth)
+New `MT_COLOR_CONCEAL` for content that's "not there":
+
+- Use for signatures, weeded headers, toggle-quoted text
+- `set conceal_level = [0123]` (like Vim)
+- `set conceal_char = '†'` to show placeholder
+- Toggle visibility without losing the color definition
+
+### Column Colors
+
+Apply colors to specific columns in index_format:
+
+```
+# Color just the subject column green
+color index_subject green default
+```
+
+### Partial Match Colors
+
+Extend header coloring to support partial matches:
+
+```
+# Current: colors entire Subject header
+color header green default "^Subject"
+
+# Proposed: color just the matched group
+color header green default "^Subject: (.*)" 1
+```
+
+### Truecolor Fallback
+
+Support both truecolor and 256-color in the same theme:
+
+```
+# Theme file with increasing color depth
+color object red green           # 16-color fallback
+color object color123 color214   # 256-color
+color object #aabbcc #112233     # Truecolor (if supported)
+```
+
+Last viable setting wins, allowing one theme file for all terminals.
 
 ---
 
-## Mouse Support (mouse.txt)
+## Compose Improvements
 
-### Proposed Features
-- Click to select in index
-- Click to open in sidebar
-- Click to navigate in pager
-- Drag to resize panels
-- Scroll wheel support
-
----
-
-## Compose Enhancements
+The Compose screen creates outgoing messages. Proposed enhancements:
 
 ### Window Structure
-- Envelope (custom window)
-- Attachment bar (simple bar)
-- Attachment view (menu)
-- Compose bar (custom)
-- Preview window
 
-### Features
-- Move focus between fields
-- Dynamic field sizing
-- Abbreviation for long lists
-- Tab for backgrounded compose sessions
+```
+┌─────────────────────────────────┐
+│ Envelope (headers)              │
+├─────────────────────────────────┤
+│ Attachment Bar (status)         │
+├─────────────────────────────────┤
+│ Attachment View (list)          │
+├─────────────────────────────────┤
+│ Compose Bar (actions)           │
+└─────────────────────────────────┘
+```
+
+### Preview Window
+
+A new window showing rendered email preview:
+- See how the email will look to recipients
+- Update in real-time as attachments are added
+- Toggle visibility with a keybinding
+
+### Attachment Status Bar
+
+New `$attach_status` to configure the AttachBar:
+- Default: "Attachments" or "Attachments: %n"
+- Allow email expandos: "To: %t, Subject: %s"
+- Show cumulative attachment size
+
+### Multiple Compose Sessions
+
+Background compose sessions:
+- Start composing, switch back to Index
+- Status bar shows backgrounded sessions
+- Return to any session from a menu
 
 ---
 
 ## Sidebar Enhancements
 
-### Account-Aware Sidebar
-- `sidebar_account=X,Y,Z` for filtering
-- `sidebar_collapsed=X,Y,Z` for collapsing
-- Account tabs (dash-to-dock style)
-- Merge inbox into account line with $spoolfile
+The Sidebar shows folder list and navigation.
 
-### Display Options
-- `sb_display_account` list
-- Sort by account, then mailbox
-- Visibility toggle per account
+### Account-Aware Sidebar
+
+Make sidebar understand account boundaries:
+
+```
+# Show only these accounts
+set sidebar_account = work,personal
+
+# Collapse these accounts by default
+set sidebar_collapsed = lists
+```
+
+### Merged Inbox Display
+
+Use $spoolfile to merge inbox into account line:
+
+```
+# Without merge:
+work
+├── inbox  1/6
+├── sent
+└── drafts
+
+# With merge (spoolfile=inbox):
+work           1/6
+├── sent
+└── drafts
+```
+
+### Account Tabs
+
+For users who don't want sidebar space:
+- Display account tabs at top
+- Click (or key) to switch accounts
+- Combine with sidebar for favorites
 
 ---
 
-## Help System
+## Mouse Support
 
-### Help Tabs
-- Tabbed help pages
-- Context-sensitive (F1/F2)
-- Online web help option
+Enable mouse interaction throughout NeoMutt.
+
+### Proposed Features
+
+| Area | Action | Result |
+|------|--------|--------|
+| Index | Click row | Select email |
+| Index | Scroll | Page up/down |
+| Sidebar | Click folder | Open folder |
+| Sidebar | Click account | Expand/collapse |
+| Pager | Scroll | Scroll content |
+| Pager | Click URL | Open in browser |
+| Panel borders | Drag | Resize panels |
+
+### Configuration
+
+```
+set mouse = yes
+set mouse_click_selects = yes
+set mouse_scroll_pages = yes
+```
+
+---
+
+## Help System Improvements
+
+### Tabbed Help
+
+Implement tabbed help pages:
+- Multiple help topics open simultaneously
+- Easy switching between related topics
+- Browser-like navigation (back/forward)
+
+### Context-Sensitive Help
+
+Enhanced F1/F2 context help:
+- Fine-grained focus tracking
+- Window-specific help: "browser-pgp" → "browser" → general
+- Option to open online web help instead
 
 ### Dynamic Help Bar
-- `bind/macro ... show_in_help` flag
-- Customizable entries
-- Clear all and recreate option
+
+The help bar at the bottom could be customizable:
+
+```
+bind index <key> <function> show_in_help
+```
+
+Users can:
+- Clear all default help entries
+- Add their own commonly-used bindings
+- Prioritize what appears in limited space
+
+---
+
+## Alias System Enhancements
+
+### Unified Groups and Tags
+
+Merge the concepts of address groups and alias tags:
+
+- Group patterns would match tags
+- Consistent syntax across all group-related commands
+- New syntax: `<mail>@group` to send to entire group
+
+### Alias Preview
+
+When selecting aliases:
+- Pager/preview showing full details
+- Especially useful for groups
+- Show all members with their addresses
 
 ---
 
 ## Browser Improvements
 
-### Features
-- Scan subdirs for {cur,new,tmp} highlighting
-- Space handling in path completion
-- Transfer browser location to command prompt
-- Option to show maildir subdirs
+### Directory Scanning
+
+Option to scan subdirectories for maildir markers:
+- Highlight `{cur,new,tmp}` directories as mailboxes
+- Make maildir folders more visible in file browser
+
+### Path Completion Fixes
+
+Current issues with spaces in paths:
+- `/srv/with space/<tab>` doesn't work intuitively
+- Browser location doesn't transfer to command prompt
+- Need better integration between browser and input
 
 ---
 
-## Alias System
+## Format String Editor
 
-### Unified Groups and Tags
-- Group patterns match tags
-- Group commands extended
-- Syntax: `<mail>@group` to send to group
+Long-term idea: interactive format string customization
 
-### Alias Dialog
-- Pager/preview for details
-- Group indication field
-- Sort and limit by group
+- Visual editor for `$index_format`, etc.
+- Drag-and-drop columns
+- Live preview of changes
+- Similar to htop's column configuration
 
 ---
 
-## Miscellaneous Features
+## Terminal Integration
 
-### Conceal Mode
-- `MT_COLOR_CONCEAL` for invisible content
-- Use for signatures, headers, toggle-quoted
-- `set conceal_level = [0123]`
-- `set conceal_char = '†'`
+### Window Focus Detection
 
-### History Improvements
-- Pattern matching in history (`:set sidebar<UP>`)
-- ARRAY-based history search
+Detect when terminal window gains/loses focus:
+- Pause background operations when unfocused
+- Resume checking when refocused
+- Visual indication of focus state
 
-### Terminal Features
-- Window focus in/out detection
-- Terminal title script
-- Segfault backtrace to file
+### Terminal Title
 
-### Address Book
-- Index_format expando for alias short-name
-- Colors based on address patterns
-- "in-address-book", "in-address-group-X"
-
----
-
-## Future Ideas
-
-1. **Widescreen Layout**: Index and Pager side-by-side
-2. **Multiple Email View**: Side-by-side email comparison
-3. **Browser Tabs**: Implementation via tabbed-help-page first
-4. **Dynamic Format Strings**: Generic format string editor (cf htop)
-5. **Plugin System**: Lua-based plugins for colors, folding, etc.
+Customizable terminal title:
+- Show current folder name
+- Show unread count
+- Update dynamically as state changes
